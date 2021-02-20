@@ -41,23 +41,24 @@ def greet_server():
     rcv = socket.recv(HEADER).decode(FORMAT)
     print(rcv)
 
-    # socket.send(b'0123456789')
 
-    # recebe OK (4) - Controle
+def send_file():
+    # Envia FILE (6) - Dados
+    msg_type = b' 6'
 
+    sequence_num = b'0'
+    sequence_num += b' ' * (4 - len(sequence_num))
+    payload_size = b'10'
+    payload_size += b' ' * (2 - len(payload_size))
+    file = b'0123456789'
+    packed_file = msg_type + sequence_num + payload_size + file
 
-def send_data(type, msg):
-    message = msg.encode(FORMAT)
+    socket.send(packed_file)
 
-    print("sending type")
-    socket.send(type)
-    rcv = socket.recv(HEADER).decode(FORMAT)
+    # Envia ACK(7) - Controle
+    rcv = socket.recv(3)
     print(rcv)
 
-    print("sending message")
-    socket.send(message)
-    rcv = socket.recv(HEADER).decode(FORMAT)
-    print(rcv)
 
 def close_connection():
     send_data(b' 2', DISCONNECT_MSG)
@@ -66,8 +67,8 @@ if __name__ == "__main__":
     print("Greeting server")
     greet_server()
 
-    # print("Sending message")
-    # send_data(b' 1', 'Oi')
+    print("Sending File")
+    send_file()
     #
     # print("Disconnecting")
     # close_connection()

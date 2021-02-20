@@ -49,6 +49,22 @@ def greet_client(connection):
     # Envia OK (4) - Controle
     connection.send(b' 4')
 
+def receive_file(connection):
+    # Recebe FILE (6) - Dados
+    packed_file = connection.recv(1010)
+    msg_type = packed_file[:2]
+    sequence_num = packed_file[2:6]
+    payload_size = packed_file[6:8]
+    file_chunk = packed_file[8:]
+
+    print(f"{msg_type=}")
+    print(f"{sequence_num=}")
+    print(f"{payload_size=}")
+    print(f"{file_chunk=}")
+
+    # Envia ACK(7) - Controle
+    connection.send(b' 7')
+
 
 def handle_client(connection, address):
     print(f"New address: {address}")
@@ -56,6 +72,7 @@ def handle_client(connection, address):
     connected = True
     while connected:
         greet_client(connection)
+        receive_file(connection)
         connection.close()
         break
         # print("Tipificador:", tipificador_de_msg)
