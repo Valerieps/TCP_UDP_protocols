@@ -8,3 +8,11 @@ MSG_TYPE = {
     "FILE": b'6 ',
     "ACK": b'7 ',
 }
+
+
+class File:
+    def __init__(self):
+        self.file_name = None
+        self.file_size = None
+        self.payload_size = None
+        self.bin_file = None

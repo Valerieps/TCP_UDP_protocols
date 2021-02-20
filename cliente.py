@@ -1,6 +1,6 @@
 import socket
 import argparse
-from common import MSG_TYPE
+from common import MSG_TYPE, File
 
 
 parser = argparse.ArgumentParser(description='Servidor')
@@ -24,14 +24,26 @@ def greet_server():
     rcv = socket.recv(HEADER).decode(FORMAT)
     print(rcv)
 
-def send_file_info(FILENAME):
+def parse_file(FILENAME):
+    arquivo = File()
+    arquivo.bin_file = open(FILENAME, "rb").read()
+    print(arquivo.bin_file)
+    arquivo.file_name = bytearray(FILENAME, FORMAT)
+    arquivo.file_size = bytes(len(arquivo.bin_file))
+    print(arquivo.file_size)
+    return arquivo
 
+def send_file_info(arquivo):
     # Envia INFO FILE (3) - Controle
     msg_type = MSG_TYPE["INFO_FILE"]
-    file_name = bytearray(FILENAME, FORMAT)
+
+    file_name = arquivo.file_name
     file_name += b' ' * (15 - len(file_name))
-    file_size = b'10'
-    file_size += b' ' * (8 - len(file_size))
+
+    # file_size = arquivo.file_size
+    file_size = b''
+    file_size += b'' * (8 - len(arquivo.file_size))
+
     info_file = msg_type + file_name + file_size
     socket.send(info_file)
 
@@ -40,14 +52,18 @@ def send_file_info(FILENAME):
     print(rcv)
 
 
-def send_file():
+def send_file(arquivo):
+
     # Envia FILE (6) - Dados
     msg_type = MSG_TYPE["FILE"]
+
     sequence_num = b'0'
     sequence_num += b' ' * (4 - len(sequence_num))
+
     payload_size = b'10'
     payload_size += b' ' * (2 - len(payload_size))
-    file = b'Igor mais lindao'
+
+    file = arquivo.bin_file
     packed_file = msg_type + sequence_num + payload_size + file
 
     socket.send(packed_file)
@@ -60,5 +76,6 @@ if __name__ == "__main__":
     FILENAME = args.file
 
     greet_server()
-    send_file_info(FILENAME)
-    send_file(FILENAME)
+    arquivo = parse_file(FILENAME)
+    send_file_info(arquivo)
+    send_file(arquivo)

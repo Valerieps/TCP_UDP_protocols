@@ -1,7 +1,7 @@
 import socket
 import threading
 import argparse
-from common import MSG_TYPE
+from common import MSG_TYPE, File
 
 
 parser = argparse.ArgumentParser(description='Servidor')
@@ -18,13 +18,6 @@ server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 
 server.bind(ADDR)
-
-class File:
-    def __init__(self):
-        self.file_name = None
-        self.file_size = None
-        self.payload_size = None
-        self.bin_file = None
 
 def greet_client(connection):
     # Recebe HELLO (1) - Controle
@@ -81,7 +74,8 @@ def receive_file(connection, file):
 
 def save_file(file):
     # abrir o arquivo da extensão correta
-    filename = "output/" + file.file_name
+    filename = str(file.file_name).split("/")[-1]
+    filename = "output/" + filename
     with open(filename, "wb") as out:
         out.write(file.bin_file)
 
