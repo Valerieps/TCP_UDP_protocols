@@ -3,6 +3,7 @@ import threading
 import argparse
 from common import MSG_TYPE
 
+
 parser = argparse.ArgumentParser(description='Servidor')
 parser.add_argument('port', type=int)
 args = parser.parse_args()
@@ -12,16 +13,10 @@ HEADER = 64
 SERVER = socket.gethostbyname(socket.gethostname())
 ADDR = (SERVER, PORT)
 FORMAT = "ascii"
-DISCONNECT_MSG = "!close"
 
-# new socket
-# family, type
-# TODO receber do teclado
-# todo definir se a conexão é ipv4 ou ipv6
 server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 
-# binds the server with this new connection
 server.bind(ADDR)
 
 class File:
@@ -40,9 +35,6 @@ def greet_client(connection):
 
     # Envia CONNECTION  (2) - Controle
     connection.send(MSG_TYPE["CONNECTION"])
-
-
-
 
 def receive_info_file(connection):
 

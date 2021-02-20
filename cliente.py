@@ -6,7 +6,7 @@ from common import MSG_TYPE
 parser = argparse.ArgumentParser(description='Servidor')
 parser.add_argument('ip', type=str)
 parser.add_argument('port', type=int)
-# parser.add_argument('source_file', type=open)
+parser.add_argument('file', type=str)
 args = parser.parse_args()
 
 PORT = args.port
@@ -20,20 +20,19 @@ socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 socket.connect(ADDR)
 
 def greet_server():
-    # envia HELLO (1) - Controle
     socket.send(MSG_TYPE["HELLO"])
-
-    # Recebe CONNECTION  (2) - Controle
     rcv = socket.recv(HEADER).decode(FORMAT)
     print(rcv)
 
+def send_file_info(FILENAME):
+
     # Envia INFO FILE (3) - Controle
     msg_type = MSG_TYPE["INFO_FILE"]
-    file_name = b'arquivo.txt'
+    file_name = bytearray(FILENAME, FORMAT)
     file_name += b' ' * (15 - len(file_name))
     file_size = b'10'
     file_size += b' ' * (8 - len(file_size))
-    info_file = msg_type + file_name +  file_size
+    info_file = msg_type + file_name + file_size
     socket.send(info_file)
 
     # recebe OK (4) - Controle
@@ -58,8 +57,8 @@ def send_file():
     print(rcv)
 
 if __name__ == "__main__":
-    print("Greeting server")
-    greet_server()
+    FILENAME = args.file
 
-    print("Sending File")
-    send_file()
+    greet_server()
+    send_file_info(FILENAME)
+    send_file(FILENAME)
