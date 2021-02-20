@@ -27,22 +27,20 @@ def greet_server():
 def parse_file(FILENAME):
     arquivo = File()
     arquivo.bin_file = open(FILENAME, "rb").read()
-    print(arquivo.bin_file)
+    # print(arquivo.bin_file)
     arquivo.file_name = bytearray(FILENAME, FORMAT)
-    arquivo.file_size = bytes(len(arquivo.bin_file))
-    print(arquivo.file_size)
+    arquivo.file_size = str(len(arquivo.bin_file)).encode(FORMAT)
+    print(f"{arquivo.file_size=}")
     return arquivo
 
 def send_file_info(arquivo):
     # Envia INFO FILE (3) - Controle
     msg_type = MSG_TYPE["INFO_FILE"]
-
     file_name = arquivo.file_name
     file_name += b' ' * (15 - len(file_name))
-
-    # file_size = arquivo.file_size
-    file_size = b''
-    file_size += b'' * (8 - len(arquivo.file_size))
+    file_size = arquivo.file_size
+    file_size += b' ' * (8 - len(file_size))
+    print(f"{file_size=}")
 
     info_file = msg_type + file_name + file_size
     socket.send(info_file)
@@ -72,10 +70,14 @@ def send_file(arquivo):
     rcv = socket.recv(3)
     print(rcv)
 
-if __name__ == "__main__":
-    FILENAME = args.file
-
+def main(FILENAME):
     greet_server()
     arquivo = parse_file(FILENAME)
     send_file_info(arquivo)
     send_file(arquivo)
+
+
+if __name__ == "__main__":
+    FILENAME = args.file
+    main(FILENAME)
+

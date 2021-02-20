@@ -39,35 +39,25 @@ def receive_info_file(connection):
     file_name = info_file_byte[2:17].decode(FORMAT).strip()
     file_size = info_file_byte[17:].decode(FORMAT).strip()
 
-
     file.file_name = str(file_name).strip()
     file.file_size = file_size
-
-    print(info_file_byte)
-    print(msg_type)
-    print(f"{file.file_name=}")
-    print(file_size)
 
     # Envia OK (4) - Controle
     connection.send(MSG_TYPE["OK"])
     return file
 
 
-def receive_file(connection, file):
+def receive_file(connection, arquivo):
     # Recebe FILE (6) - Dados
-    packed_file = connection.recv(1010)
+    size = int(arquivo.file_size)
+    packed_file = connection.recv(size+1)
     msg_type = packed_file[:2]
     sequence_num = packed_file[2:6]
     payload_size = packed_file[6:8]
     file_chunk = packed_file[8:]
 
-    file.payload_size = payload_size
-    file.bin_file = file_chunk
-
-    print(f"{msg_type=}")
-    print(f"{sequence_num=}")
-    print(f"{payload_size=}")
-    print(f"{file_chunk=}")
+    arquivo.payload_size = payload_size
+    arquivo.bin_file = file_chunk
 
     # Envia ACK(7) - Controle
     connection.send(MSG_TYPE["ACK"])
