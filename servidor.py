@@ -24,8 +24,8 @@ server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 # binds the server with this new connection
 server.bind(ADDR)
 
-def greet_client(connection):
 
+def greet_client(connection):
     # Recebe HELLO (1) - Controle
     hello = connection.recv(2)
     if hello != b' 1':
@@ -49,7 +49,9 @@ def greet_client(connection):
     # Envia OK (4) - Controle
     connection.send(b' 4')
 
+
 def receive_file(connection):
+
     # Recebe FILE (6) - Dados
     packed_file = connection.recv(1010)
     msg_type = packed_file[:2]
@@ -65,28 +67,16 @@ def receive_file(connection):
     # Envia ACK(7) - Controle
     connection.send(b' 7')
 
+def end_connection(connection):
+    connection.shutdown(1)
+    connection.close()
+
 
 def handle_client(connection, address):
     print(f"New address: {address}")
-
-    connected = True
-    while connected:
-        greet_client(connection)
-        receive_file(connection)
-        connection.close()
-        break
-        # print("Tipificador:", tipificador_de_msg)
-        # print(len(tipificador_de_msg))
-        # connection.send("ACK".encode(FORMAT))
-        #
-        # # parte 2
-        # msg = connection.recv(HEADER).decode(FORMAT)
-        # print(f"{address} said: {msg}")
-        # connection.send("ACK".encode(FORMAT))
-
-        # if msg == DISCONNECT_MSG:
-        #     connected = False
-    connection.close()
+    greet_client(connection)
+    receive_file(connection)
+    end_connection(connection)
 
 
 def start():
