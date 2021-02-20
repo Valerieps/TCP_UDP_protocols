@@ -27,10 +27,8 @@ def greet_server():
 def parse_file(FILENAME):
     arquivo = File()
     arquivo.bin_file = open(FILENAME, "rb").read()
-    # print(arquivo.bin_file)
     arquivo.file_name = bytearray(FILENAME, FORMAT)
     arquivo.file_size = str(len(arquivo.bin_file)).encode(FORMAT)
-    print(f"{arquivo.file_size=}")
     return arquivo
 
 def send_file_info(arquivo):
@@ -45,9 +43,20 @@ def send_file_info(arquivo):
     info_file = msg_type + file_name + file_size
     socket.send(info_file)
 
-    # recebe OK (4) - Controle
+    # Recebe OK (4) - Controle
     rcv = socket.recv(HEADER).decode(FORMAT)
     print(rcv)
+
+
+def break_in_chunks(bin_data, payload_size=1000):
+    start = None
+    last_stop = len(bin_data) // payload_size
+    idx = None
+    for idx in range(0, last_stop):
+        start = idx * payload_size
+        end = start + payload_size
+        yield idx, bin_data[start:end]
+    yield idx, bin_data[start:]
 
 
 def send_file(arquivo):
@@ -55,20 +64,22 @@ def send_file(arquivo):
     # Envia FILE (6) - Dados
     msg_type = MSG_TYPE["FILE"]
 
-    sequence_num = b'0'
-    sequence_num += b' ' * (4 - len(sequence_num))
+    for idx, package in break_in_chunks(arquivo.bin_file, payload_size=1000):
 
-    payload_size = b'10'
-    payload_size += b' ' * (2 - len(payload_size))
+        sequence_num = bytes(idx)
+        sequence_num += b' ' * (4 - len(sequence_num))
 
-    file = arquivo.bin_file
-    packed_file = msg_type + sequence_num + payload_size + file
+        payload_size = b'  '  # todo descobrir o que é isso
+        payload_size += b' ' * (2 - len(payload_size))
 
-    socket.send(packed_file)
+        packed_file = msg_type + sequence_num + payload_size + package
 
-    # Recebe ACK(7) - Controle
-    rcv = socket.recv(3)
-    print(rcv)
+        # enviar
+        socket.send(packed_file)
+
+        # Recebe ACK(7) - Controle
+        rcv = socket.recv(3)
+        print(rcv)
 
 def main(FILENAME):
     greet_server()
