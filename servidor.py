@@ -1,6 +1,7 @@
 import socket
 import threading
 import argparse
+import sys
 
 parser = argparse.ArgumentParser(description='Servidor')
 parser.add_argument('port', type=int)
@@ -23,31 +24,60 @@ server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 # binds the server with this new connection
 server.bind(ADDR)
 
+def greet_client(connection):
+
+    # Recebe HELLO (1) - Controle
+    hello = connection.recv(2)
+    if hello != b' 1':
+        print("Wrong handshake")
+        connection.close()
+
+    # Envia CONNECTION  (2) - Controle
+    connection.send(b' 2')
+
+    # Recebe INFO FILE (3) - Controle
+    info_file_byte = connection.recv(26)
+    msg_type = info_file_byte[:2]
+    file_name = info_file_byte[2:17]
+    file_size = info_file_byte[17:]
+
+    print(info_file_byte)
+    print(msg_type)
+    print(file_name)
+    print(file_size)
+
+    # Envia OK (4) - Controle
+    connection.send(b' 4')
+
+
 def handle_client(connection, address):
-    print(f"New connection: {address}")
+    print(f"New address: {address}")
 
     connected = True
     while connected:
-        msg_length = connection.recv(HEADER).decode(FORMAT)
-        if msg_length:
-            msg_length = int(msg_length)
-            msg = connection.recv(msg_length).decode(FORMAT)
-            print(f"{address} said: {msg}")
-            connection.send("ACK".encode(FORMAT))
-            if msg == DISCONNECT_MSG:
-                connected = False
+        greet_client(connection)
+        connection.close()
+        break
+        # print("Tipificador:", tipificador_de_msg)
+        # print(len(tipificador_de_msg))
+        # connection.send("ACK".encode(FORMAT))
+        #
+        # # parte 2
+        # msg = connection.recv(HEADER).decode(FORMAT)
+        # print(f"{address} said: {msg}")
+        # connection.send("ACK".encode(FORMAT))
+
+        # if msg == DISCONNECT_MSG:
+        #     connected = False
     connection.close()
 
 
 def start():
-
-
     server.listen()
     print(f"Waiting connections in {SERVER}")
-
     while True:
-        new_addr, new_conn = server.accept()  # a new client is trying to connect
-        new_thread = threading.Thread(target=handle_client, args=(new_addr, new_conn))
+        new_conn, new_addr = server.accept()  # a new client is trying to connect
+        new_thread = threading.Thread(target=handle_client, args=(new_conn, new_addr))
         new_thread.start()
         print(f"Active Connections: {threading.activeCount() - 1}")  # less 1 because the star function is a thread
 
