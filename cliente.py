@@ -1,5 +1,7 @@
 import socket
 import argparse
+from common import MSG_TYPE
+
 
 parser = argparse.ArgumentParser(description='Servidor')
 parser.add_argument('ip', type=str)
@@ -19,14 +21,14 @@ socket.connect(ADDR)
 
 def greet_server():
     # envia HELLO (1) - Controle
-    socket.send(b' 1')
+    socket.send(MSG_TYPE["HELLO"])
 
     # Recebe CONNECTION  (2) - Controle
     rcv = socket.recv(HEADER).decode(FORMAT)
     print(rcv)
 
     # Envia INFO FILE (3) - Controle
-    msg_type = b' 3'
+    msg_type = MSG_TYPE["INFO_FILE"]
     file_name = b'arquivo.txt'
     file_name += b' ' * (15 - len(file_name))
     file_size = b'10'
@@ -41,7 +43,7 @@ def greet_server():
 
 def send_file():
     # Envia FILE (6) - Dados
-    msg_type = b' 6'
+    msg_type = MSG_TYPE["FILE"]
     sequence_num = b'0'
     sequence_num += b' ' * (4 - len(sequence_num))
     payload_size = b'10'
@@ -51,13 +53,9 @@ def send_file():
 
     socket.send(packed_file)
 
-    # Envia ACK(7) - Controle
+    # Recebe ACK(7) - Controle
     rcv = socket.recv(3)
     print(rcv)
-
-
-def close_connection():
-    send_data(b' 2', DISCONNECT_MSG)
 
 if __name__ == "__main__":
     print("Greeting server")
@@ -65,15 +63,3 @@ if __name__ == "__main__":
 
     print("Sending File")
     send_file()
-    #
-    # print("Disconnecting")
-    # close_connection()
-
-
-
-    # msg_length = len(message)
-    # # o server  ler aenas essa qd de bytes
-    # send_length = str(msg_length).encode(FORMAT)
-    # send_length += b' ' * (HEADER - len(send_length))
-    # send_length = bytes('5'.encode(FORMAT))
-    # socket.send(send_length)

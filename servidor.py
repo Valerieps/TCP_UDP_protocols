@@ -1,7 +1,7 @@
 import socket
 import threading
 import argparse
-import sys
+from common import MSG_TYPE
 
 parser = argparse.ArgumentParser(description='Servidor')
 parser.add_argument('port', type=int)
@@ -24,34 +24,51 @@ server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 # binds the server with this new connection
 server.bind(ADDR)
 
+class File:
+    def __init__(self):
+        self.file_name = None
+        self.file_size = None
+        self.payload_size = None
+        self.bin_file = None
 
 def greet_client(connection):
     # Recebe HELLO (1) - Controle
     hello = connection.recv(2)
-    if hello != b' 1':
+    if hello != MSG_TYPE["HELLO"]:
         print("Wrong handshake")
         connection.close()
 
     # Envia CONNECTION  (2) - Controle
-    connection.send(b' 2')
+    connection.send(MSG_TYPE["CONNECTION"])
+
+
+
+
+def receive_info_file(connection):
 
     # Recebe INFO FILE (3) - Controle
+    file = File()
+
     info_file_byte = connection.recv(26)
     msg_type = info_file_byte[:2]
-    file_name = info_file_byte[2:17]
-    file_size = info_file_byte[17:]
+    file_name = info_file_byte[2:17].decode(FORMAT).strip()
+    file_size = info_file_byte[17:].decode(FORMAT).strip()
+
+
+    file.file_name = str(file_name).strip()
+    file.file_size = file_size
 
     print(info_file_byte)
     print(msg_type)
-    print(file_name)
+    print(f"{file.file_name=}")
     print(file_size)
 
     # Envia OK (4) - Controle
-    connection.send(b' 4')
+    connection.send(MSG_TYPE["OK"])
+    return file
 
 
-def receive_file(connection):
-
+def receive_file(connection, file):
     # Recebe FILE (6) - Dados
     packed_file = connection.recv(1010)
     msg_type = packed_file[:2]
@@ -59,15 +76,26 @@ def receive_file(connection):
     payload_size = packed_file[6:8]
     file_chunk = packed_file[8:]
 
+    file.payload_size = payload_size
+    file.bin_file = file_chunk
+
     print(f"{msg_type=}")
     print(f"{sequence_num=}")
     print(f"{payload_size=}")
     print(f"{file_chunk=}")
 
     # Envia ACK(7) - Controle
-    connection.send(b' 7')
+    connection.send(MSG_TYPE["ACK"])
+
+def save_file(file):
+    # abrir o arquivo da extensão correta
+    filename = "output/" + file.file_name
+    with open(filename, "wb") as out:
+        out.write(file.bin_file)
 
 def end_connection(connection):
+    # Envia FIM(5) - Controle
+    connection.send(MSG_TYPE["FIM"])
     connection.shutdown(1)
     connection.close()
 
@@ -75,13 +103,16 @@ def end_connection(connection):
 def handle_client(connection, address):
     print(f"New address: {address}")
     greet_client(connection)
-    receive_file(connection)
+    file = receive_info_file(connection)
+    receive_file(connection, file)
+    save_file(file)
     end_connection(connection)
 
 
-def start():
+def main():
     server.listen()
     print(f"Waiting connections in {SERVER}")
+
     while True:
         new_conn, new_addr = server.accept()  # a new client is trying to connect
         new_thread = threading.Thread(target=handle_client, args=(new_conn, new_addr))
@@ -90,5 +121,4 @@ def start():
 
 
 if __name__ == "__main__":
-    print("Server starting")
-    start()
+    main()
