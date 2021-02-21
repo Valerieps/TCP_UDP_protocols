@@ -50,11 +50,6 @@ def greet_client(control_channel, data_channel):
     control_channel.send(message)
     return data_channel
 
-def test(control_channel, data_channel):
-
-    # Recebe HELLO (1) - Controle
-    info_file_byte = control_channel.recv(30)
-    control_channel.send(b'AAA')
 
 def receive_info_file(control_channel):
 
@@ -76,13 +71,13 @@ def receive_info_file(control_channel):
 
 def receive_file(control_channel, data_channel, arquivo):
     file_size = int(arquivo.file_size)
-    qnts_pacotes = file_size // PAYLOAD_SIZE
-    if qnts_pacotes * PAYLOAD_SIZE < file_size:
-        qnts_pacotes += 1
+    total_de_pacotes = file_size // PAYLOAD_SIZE
+    if total_de_pacotes * PAYLOAD_SIZE < file_size:
+        total_de_pacotes += 1
 
-    pacotes = [None for i in range(qnts_pacotes)]
+    pacotes = [None for i in range(total_de_pacotes)]
 
-    for i in range(qnts_pacotes):
+    for i in range(total_de_pacotes):
         # Recebe FILE (6) - Dados
         packed_file, client = data_channel.recvfrom(PAYLOAD_SIZE + 10)
 
@@ -110,35 +105,33 @@ def save_file(arquivo):
             out.write(pacote)
 
 
-def end_connection(connection):
+def end_connection(channel):
     # Envia FIM(5) - Controle
-    connection.send(MSG_TYPE["FIM"])
-    connection.shutdown(1)
-    connection.close()
+    channel.shutdown(1)
+    channel.close()
 
 
 def handle_client(control_channel, server, address):
     print(f"New address connected: {address}")
 
-    udp_port = 3030  # TODO como designar isso de forma automatica?
-    data_channel = open_data_channel(udp_port, server)
+    data_channel = open_data_channel(0, server)
     greet_client(control_channel, data_channel)
     file = receive_info_file(control_channel)
     receive_file(control_channel, data_channel, file)
     save_file(file)
+    control_channel.send(MSG_TYPE["FIM"])
+    end_connection(data_channel)
     end_connection(control_channel)
 
 
 def main():
     args = parse_args()
-    server = socket.gethostbyname(socket.gethostname())
-
     tcp_port = args.port
+    server = socket.gethostbyname(socket.gethostname())
     control_channel = open_control_channel(tcp_port, server)
     control_channel.listen()
 
     print(f"Waiting connections")
-
     while True:
         new_tcp_conn, new_client_addr = control_channel.accept()
         new_thread = threading.Thread(target=handle_client, args=(new_tcp_conn, server, new_client_addr))
