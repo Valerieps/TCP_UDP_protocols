@@ -50,12 +50,18 @@ def greet_client(control_channel, data_channel):
     control_channel.send(message)
     return data_channel
 
+def test(control_channel, data_channel):
+
+    # Recebe HELLO (1) - Controle
+    info_file_byte = control_channel.recv(30)
+    control_channel.send(b'AAA')
 
 def receive_info_file(control_channel):
+
     # Recebe INFO FILE (3) - Controle
     file = File()
 
-    info_file_byte = control_channel.recv(26)
+    info_file_byte = control_channel.recv(30)
     msg_type = info_file_byte[:2]
     file_name = info_file_byte[2:17].decode(FORMAT).strip()
     file_size = info_file_byte[17:].decode(FORMAT).strip()
@@ -78,7 +84,7 @@ def receive_file(control_channel, data_channel, arquivo):
 
     for i in range(qnts_pacotes):
         # Recebe FILE (6) - Dados
-        packed_file = data_channel.recv(PAYLOAD_SIZE + 10)
+        packed_file, client = data_channel.recvfrom(PAYLOAD_SIZE + 10)
 
         msg_type = packed_file[:2]
         sequence_num = int(packed_file[2:6])
@@ -117,9 +123,8 @@ def handle_client(control_channel, server, address):
     # Opens data channel
     udp_port = 3030  # TODO como designar isso de forma automatica?
     data_channel = open_data_channel(udp_port, server)
-
     greet_client(control_channel, data_channel)
-    # file = receive_info_file(control_channel)
+    file = receive_info_file(control_channel)
     # receive_file(control_channel, data_channel, file)
     # save_file(file)
     end_connection(control_channel)

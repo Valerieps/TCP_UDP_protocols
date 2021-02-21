@@ -32,11 +32,16 @@ def greet_server(control_channel):
     data_channel_port = int(server_answer[2:])
     return data_channel_port
 
+def test(control_channel):
+    control_channel.send(MSG_TYPE["HELLO"])
+    server_answer = control_channel.recv(7).decode(FORMAT)
+    print(server_answer)
+
 
 def open_data_channel(args, data_channel_port):
     udp_addr = (args.ip, data_channel_port)
 
-    # cria conexão TCP
+    # cria conexão UDP
     data_channel = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     data_channel.connect(udp_addr)
     return data_channel
@@ -60,11 +65,15 @@ def send_file_info(control_channel, arquivo):
     print(f"{file_size=}")
 
     info_file = msg_type + file_name + file_size
+    print(f"{len(info_file)=}")
+
     control_channel.send(info_file)
+    print("mandou")
 
     # Recebe OK (4) - Controle
     rcv = control_channel.recv(3).decode(FORMAT)
-    # print(rcv)
+
+    print(rcv)
 
 
 def break_in_chunks(bin_data, payload_size=PAYLOAD_SIZE):
@@ -96,7 +105,7 @@ def send_file(data_channel, control_channel, arquivo):
         payload_size += b' ' * (2 - len(payload_size))
 
         packed_file = msg_type + sequence_num + payload_size + package
-        data_channel.send(packed_file)
+        data_channel.sendto(packed_file, data_channel.getpeername())
 
         # Recebe ACK(7) - Controle
         rcv = control_channel.recv(3)
@@ -109,10 +118,9 @@ def main():
 
     control_channel = connect_to_control_channel(args)
     data_channel_port = greet_server(control_channel)
-    # data_channel = open_data_channel(args, data_channel_port)
-    #
-    # arquivo = parse_file(filename)
-    # send_file_info(data_channel, arquivo)
+    data_channel = open_data_channel(args, data_channel_port)
+    arquivo = parse_file(filename)
+    send_file_info(control_channel, arquivo)
     # send_file(data_channel, control_channel, arquivo)
 
 
