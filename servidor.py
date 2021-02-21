@@ -3,42 +3,59 @@ import threading
 import argparse
 from common import MSG_TYPE, File
 
-
-parser = argparse.ArgumentParser(description='Servidor')
-parser.add_argument('port', type=int)
-args = parser.parse_args()
-
-PORT = args.port
-HEADER = 64
-SERVER = socket.gethostbyname(socket.gethostname())
-ADDR = (SERVER, PORT)
 FORMAT = "ascii"
 PAYLOAD_SIZE = 1000
 
-# todo é aqui que muda pra udp
-server_tcp = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-server_udp = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
-server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-server.bind(ADDR)
+def parse_args():
+    parser = argparse.ArgumentParser(description='Servidor')
+    parser.add_argument('port', type=int)
+    return parser.parse_args()
 
 
-def greet_client(connection):
+def open_control_channel(tcp_port, server):
+    tcp_addr = (server, tcp_port)
+
+    control_channel = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    control_channel.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    control_channel.bind(tcp_addr)
+    return control_channel
+
+
+def open_data_channel(udp_port, server):
+    udp_addr = (server, udp_port)
+
+    data_channel = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    data_channel.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    data_channel.bind(udp_addr)
+    return data_channel
+
+
+def greet_client(control_channel, data_channel):
+
     # Recebe HELLO (1) - Controle
-    hello = connection.recv(2)
+    hello = control_channel.recv(2)
     if hello != MSG_TYPE["HELLO"]:
         print("Wrong handshake")
-        connection.close()
+        control_channel.close()
 
     # Envia CONNECTION  (2) - Controle
-    connection.send(MSG_TYPE["CONNECTION"])
+    msg_type = MSG_TYPE["CONNECTION"]
+    udp_port = data_channel.getsockname()[1]
+    udp_port = str(udp_port).encode(FORMAT)
+
+    # TODO udp port tem 5 bytes e não 4
+    udp_port += b' ' * (5 - len(udp_port))
+    message = msg_type + udp_port
+    control_channel.send(message)
+    return data_channel
 
 
-def receive_info_file(connection):
+def receive_info_file(control_channel):
     # Recebe INFO FILE (3) - Controle
     file = File()
 
-    info_file_byte = connection.recv(26)
+    info_file_byte = control_channel.recv(26)
     msg_type = info_file_byte[:2]
     file_name = info_file_byte[2:17].decode(FORMAT).strip()
     file_size = info_file_byte[17:].decode(FORMAT).strip()
@@ -47,11 +64,11 @@ def receive_info_file(connection):
     file.file_size = file_size
 
     # Envia OK (4) - Controle
-    connection.send(MSG_TYPE["OK"])
+    control_channel.send(MSG_TYPE["OK"])
     return file
 
 
-def receive_file(connection, arquivo):
+def receive_file(control_channel, data_channel, arquivo):
     file_size = int(arquivo.file_size)
     qnts_pacotes = file_size // PAYLOAD_SIZE
     if qnts_pacotes * PAYLOAD_SIZE < file_size:
@@ -61,7 +78,8 @@ def receive_file(connection, arquivo):
 
     for i in range(qnts_pacotes):
         # Recebe FILE (6) - Dados
-        packed_file = connection.recv(PAYLOAD_SIZE + 10)
+        packed_file = data_channel.recv(PAYLOAD_SIZE + 10)
+
         msg_type = packed_file[:2]
         sequence_num = int(packed_file[2:6])
         payload_size = packed_file[6:8]
@@ -71,7 +89,7 @@ def receive_file(connection, arquivo):
             pacotes[sequence_num] = payload
 
         # Envia ACK(7) - Controle
-        connection.send(MSG_TYPE["ACK"])
+        control_channel.send(MSG_TYPE["ACK"])
 
     arquivo.bin_file = pacotes
 
@@ -93,25 +111,35 @@ def end_connection(connection):
     connection.close()
 
 
-def handle_client(connection, address):
-    print(f"New address: {address}")
-    greet_client(connection)
-    file = receive_info_file(connection)
-    receive_file(connection, file)
-    save_file(file)
-    end_connection(connection)
+def handle_client(control_channel, server, address):
+    print(f"New address connected: {address}")
+
+    # Opens data channel
+    udp_port = 3030  # TODO como designar isso de forma automatica?
+    data_channel = open_data_channel(udp_port, server)
+
+    greet_client(control_channel, data_channel)
+    # file = receive_info_file(control_channel)
+    # receive_file(control_channel, data_channel, file)
+    # save_file(file)
+    end_connection(control_channel)
 
 
 def main():
-    server.listen()
-    print(f"Waiting connections in {SERVER}")
+    args = parse_args()
+    server = socket.gethostbyname(socket.gethostname())
+
+    tcp_port = args.port
+    control_channel = open_control_channel(tcp_port, server)
+    control_channel.listen()
+
+    print(f"Waiting connections")
 
     while True:
-        new_conn, new_addr = server.accept()  # a new client is trying to connect
-        new_thread = threading.Thread(target=handle_client, args=(new_conn, new_addr))
+        new_tcp_conn, new_client_addr = control_channel.accept()
+        new_thread = threading.Thread(target=handle_client, args=(new_tcp_conn, server, new_client_addr))
         new_thread.start()
-        print(f"Active Connections: {threading.activeCount() - 1}")  # less 1 because the star function is a thread
-
+        print(f"Active Connections: {threading.activeCount() - 1}")
 
 if __name__ == "__main__":
     main()
