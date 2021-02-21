@@ -96,7 +96,6 @@ def send_file(data_channel, control_channel, arquivo):
     msg_type = MSG_TYPE["FILE"]
 
     for idx, package in break_in_chunks(arquivo.bin_file, payload_size=1000):
-        # print(idx)
         idx = str(idx).encode(FORMAT)
         sequence_num = bytes(idx)
         sequence_num += b' ' * (4 - len(sequence_num))
@@ -109,7 +108,7 @@ def send_file(data_channel, control_channel, arquivo):
 
         # Recebe ACK(7) - Controle
         rcv = control_channel.recv(3)
-        # print(rcv)
+        print(rcv)
 
 
 def main():
@@ -121,7 +120,7 @@ def main():
     data_channel = open_data_channel(args, data_channel_port)
     arquivo = parse_file(filename)
     send_file_info(control_channel, arquivo)
-    # send_file(data_channel, control_channel, arquivo)
+    send_file(data_channel, control_channel, arquivo)
 
 
 if __name__ == "__main__":

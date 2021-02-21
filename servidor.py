@@ -120,13 +120,12 @@ def end_connection(connection):
 def handle_client(control_channel, server, address):
     print(f"New address connected: {address}")
 
-    # Opens data channel
     udp_port = 3030  # TODO como designar isso de forma automatica?
     data_channel = open_data_channel(udp_port, server)
     greet_client(control_channel, data_channel)
     file = receive_info_file(control_channel)
-    # receive_file(control_channel, data_channel, file)
-    # save_file(file)
+    receive_file(control_channel, data_channel, file)
+    save_file(file)
     end_connection(control_channel)
 
 
