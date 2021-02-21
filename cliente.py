@@ -2,7 +2,6 @@ import socket
 import argparse
 from common import MSG_TYPE, File
 
-
 parser = argparse.ArgumentParser(description='Servidor')
 parser.add_argument('ip', type=str)
 parser.add_argument('port', type=int)
@@ -15,14 +14,17 @@ HEADER = 64
 FORMAT = "ascii"
 DISCONNECT_MSG = "!close"
 ADDR = (SERVER, PORT)
+PAYLOAD_SIZE = 1000
 
 socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 socket.connect(ADDR)
+
 
 def greet_server():
     socket.send(MSG_TYPE["HELLO"])
     rcv = socket.recv(HEADER).decode(FORMAT)
     print(rcv)
+
 
 def parse_file(FILENAME):
     arquivo = File()
@@ -30,6 +32,7 @@ def parse_file(FILENAME):
     arquivo.file_name = bytearray(FILENAME, FORMAT)
     arquivo.file_size = str(len(arquivo.bin_file)).encode(FORMAT)
     return arquivo
+
 
 def send_file_info(arquivo):
     # Envia INFO FILE (3) - Controle
@@ -48,11 +51,15 @@ def send_file_info(arquivo):
     print(rcv)
 
 
-def break_in_chunks(bin_data, payload_size=1000):
+def break_in_chunks(bin_data, payload_size=PAYLOAD_SIZE):
+    qnts_pacotes = len(bin_data) // PAYLOAD_SIZE
+    if qnts_pacotes * PAYLOAD_SIZE < len(bin_data):
+        qnts_pacotes += 1
+
     start = None
-    last_stop = len(bin_data) // payload_size
     idx = None
-    for idx in range(0, last_stop):
+
+    for idx in range(qnts_pacotes):
         start = idx * payload_size
         end = start + payload_size
         yield idx, bin_data[start:end]
@@ -60,26 +67,25 @@ def break_in_chunks(bin_data, payload_size=1000):
 
 
 def send_file(arquivo):
-
     # Envia FILE (6) - Dados
     msg_type = MSG_TYPE["FILE"]
 
     for idx, package in break_in_chunks(arquivo.bin_file, payload_size=1000):
-
+        print(idx)
+        idx = str(idx).encode(FORMAT)
         sequence_num = bytes(idx)
         sequence_num += b' ' * (4 - len(sequence_num))
 
-        payload_size = b'  '  # todo descobrir o que é isso
+        payload_size = b'11'  # todo descobrir o que é isso
         payload_size += b' ' * (2 - len(payload_size))
 
         packed_file = msg_type + sequence_num + payload_size + package
-
-        # enviar
         socket.send(packed_file)
 
         # Recebe ACK(7) - Controle
         rcv = socket.recv(3)
         print(rcv)
+
 
 def main(FILENAME):
     greet_server()

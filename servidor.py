@@ -13,11 +13,15 @@ HEADER = 64
 SERVER = socket.gethostbyname(socket.gethostname())
 ADDR = (SERVER, PORT)
 FORMAT = "ascii"
+PAYLOAD_SIZE = 1000
 
-server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+# todo é aqui que muda pra udp
+server_tcp = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+server_udp = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+
 server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-
 server.bind(ADDR)
+
 
 def greet_client(connection):
     # Recebe HELLO (1) - Controle
@@ -29,8 +33,8 @@ def greet_client(connection):
     # Envia CONNECTION  (2) - Controle
     connection.send(MSG_TYPE["CONNECTION"])
 
-def receive_info_file(connection):
 
+def receive_info_file(connection):
     # Recebe INFO FILE (3) - Controle
     file = File()
 
@@ -48,26 +52,39 @@ def receive_info_file(connection):
 
 
 def receive_file(connection, arquivo):
-    # Recebe FILE (6) - Dados
-    size = int(arquivo.file_size)
-    packed_file = connection.recv(size+1)
-    msg_type = packed_file[:2]
-    sequence_num = packed_file[2:6]
-    payload_size = packed_file[6:8]
-    file_chunk = packed_file[8:]
+    file_size = int(arquivo.file_size)
+    qnts_pacotes = file_size // PAYLOAD_SIZE
+    if qnts_pacotes * PAYLOAD_SIZE < file_size:
+        qnts_pacotes += 1
 
-    arquivo.payload_size = payload_size
-    arquivo.bin_file = file_chunk
+    pacotes = [None for i in range(qnts_pacotes)]
 
-    # Envia ACK(7) - Controle
-    connection.send(MSG_TYPE["ACK"])
+    for i in range(qnts_pacotes):
+        # Recebe FILE (6) - Dados
+        packed_file = connection.recv(PAYLOAD_SIZE + 10)
+        msg_type = packed_file[:2]
+        sequence_num = int(packed_file[2:6])
+        payload_size = packed_file[6:8]
+        arquivo.payload_size = payload_size
+        payload = packed_file[8:]
+        if payload:
+            pacotes[sequence_num] = payload
 
-def save_file(file):
-    # abrir o arquivo da extensão correta
-    filename = str(file.file_name).split("/")[-1]
+        # Envia ACK(7) - Controle
+        connection.send(MSG_TYPE["ACK"])
+
+    arquivo.bin_file = pacotes
+
+
+def save_file(arquivo):
+    filename = str(arquivo.file_name).split("/")[-1]
     filename = "output/" + filename
+
     with open(filename, "wb") as out:
-        out.write(file.bin_file)
+        for i, pacote in enumerate(arquivo.bin_file):
+            print("salvando pacote num", i)
+            out.write(pacote)
+
 
 def end_connection(connection):
     # Envia FIM(5) - Controle
