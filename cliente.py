@@ -1,6 +1,7 @@
 import socket
 import argparse
 from common import MSG_TYPE, File
+import time
 
 FORMAT = "ascii"
 PAYLOAD_SIZE = 1000
@@ -57,22 +58,17 @@ def parse_file(filename):
 
 def send_file_info(control_channel, arquivo):
     # Envia INFO FILE (3) - Controle
+    print("Sending file info")
     msg_type = MSG_TYPE["INFO_FILE"]
     file_name = arquivo.file_name
     file_name += b' ' * (15 - len(file_name))
     file_size = arquivo.file_size
     file_size += b' ' * (8 - len(file_size))
-    print(f"{file_size=}")
-
     info_file = msg_type + file_name + file_size
-    print(f"{len(info_file)=}")
-
     control_channel.send(info_file)
-    print("mandou")
 
     # Recebe OK (4) - Controle
     rcv = control_channel.recv(3).decode(FORMAT)
-
     print(rcv)
 
 
@@ -108,7 +104,9 @@ def send_file(data_channel, control_channel, arquivo):
 
         # Recebe ACK(7) - Controle
         rcv = control_channel.recv(3)
-        print(rcv)
+        if rcv:
+            print("Servidor recebeu pacote", sequence_num)
+        # time.sleep(3)
 
 
 def main():

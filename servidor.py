@@ -71,15 +71,22 @@ def receive_info_file(control_channel):
 
 def receive_file(control_channel, data_channel, arquivo):
     file_size = int(arquivo.file_size)
+
     total_de_pacotes = file_size // PAYLOAD_SIZE
     if total_de_pacotes * PAYLOAD_SIZE < file_size:
         total_de_pacotes += 1
 
     pacotes = [None for i in range(total_de_pacotes)]
-
-    for i in range(total_de_pacotes):
+    bytes_received = 0
+    data_channel.settimeout(2)
+    while bytes_received < file_size:
         # Recebe FILE (6) - Dados
-        packed_file, client = data_channel.recvfrom(PAYLOAD_SIZE + 10)
+        data_channel.settimeout(1)
+        try:
+            packed_file, client = data_channel.recvfrom(PAYLOAD_SIZE + 10)
+        except:
+            print("Deu timeout")
+            # fazer algo se der timeout
 
         msg_type = packed_file[:2]
         sequence_num = int(packed_file[2:6])
@@ -88,6 +95,7 @@ def receive_file(control_channel, data_channel, arquivo):
         payload = packed_file[8:]
         if payload:
             pacotes[sequence_num] = payload
+            bytes_received += len(payload)
 
         # Envia ACK(7) - Controle
         control_channel.send(MSG_TYPE["ACK"])
@@ -107,7 +115,7 @@ def save_file(arquivo):
 
 def end_connection(channel):
     # Envia FIM(5) - Controle
-    channel.shutdown(1)
+    # channel.shutdown(1)
     channel.close()
 
 
@@ -137,6 +145,7 @@ def main():
         new_thread = threading.Thread(target=handle_client, args=(new_tcp_conn, server, new_client_addr))
         new_thread.start()
         print(f"Active Connections: {threading.activeCount() - 1}")
+
 
 if __name__ == "__main__":
     main()
