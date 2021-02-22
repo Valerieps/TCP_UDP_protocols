@@ -32,7 +32,7 @@ def open_data_channel(udp_port, server):
 
 
 def greet_client(control_channel, data_channel):
-
+    print("Greeting client")
     # Recebe HELLO (1) - Controle
     hello = control_channel.recv(2)
     if hello != MSG_TYPE["HELLO"]:
@@ -52,6 +52,7 @@ def greet_client(control_channel, data_channel):
 
 
 def receive_info_file(control_channel):
+    print("Receiving file info")
 
     # Recebe INFO FILE (3) - Controle
     file = File()
@@ -70,6 +71,7 @@ def receive_info_file(control_channel):
 
 
 def receive_file(control_channel, data_channel, arquivo):
+    print("Receiving file data")
     file_size = int(arquivo.file_size)
 
     total_de_pacotes = file_size // PAYLOAD_SIZE
@@ -78,10 +80,11 @@ def receive_file(control_channel, data_channel, arquivo):
 
     pacotes = [None for i in range(total_de_pacotes)]
     bytes_received = 0
-    data_channel.settimeout(2)
+    data_channel.settimeout(1)
+
+    # Recebe FILE (6) - Dados
+    print("Expecting to receive", file_size, "bytes")
     while bytes_received < file_size:
-        # Recebe FILE (6) - Dados
-        data_channel.settimeout(1)
         try:
             packed_file, client = data_channel.recvfrom(PAYLOAD_SIZE + 10)
         except:
@@ -96,6 +99,7 @@ def receive_file(control_channel, data_channel, arquivo):
         if payload:
             pacotes[sequence_num] = payload
             bytes_received += len(payload)
+            print("Received", bytes_received, "bytes")
 
         # Envia ACK(7) - Controle
         control_channel.send(MSG_TYPE["ACK"])
@@ -104,6 +108,7 @@ def receive_file(control_channel, data_channel, arquivo):
 
 
 def save_file(arquivo):
+    print("Saving file")
     filename = str(arquivo.file_name).split("/")[-1]
     filename = "output/" + filename
 

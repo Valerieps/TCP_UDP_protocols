@@ -2,6 +2,7 @@ import socket
 import argparse
 from common import MSG_TYPE, File
 import time
+from random import uniform
 
 FORMAT = "ascii"
 PAYLOAD_SIZE = 1000
@@ -27,16 +28,12 @@ def connect_to_control_channel(args):
 
 
 def greet_server(control_channel):
+    print("Greeting server")
     control_channel.send(MSG_TYPE["HELLO"])
     server_answer = control_channel.recv(7).decode(FORMAT)
     msg_type = server_answer[:2]
     data_channel_port = int(server_answer[2:])
     return data_channel_port
-
-def test(control_channel):
-    control_channel.send(MSG_TYPE["HELLO"])
-    server_answer = control_channel.recv(7).decode(FORMAT)
-    print(server_answer)
 
 
 def open_data_channel(args, data_channel_port):
@@ -88,6 +85,7 @@ def break_in_chunks(bin_data, payload_size=PAYLOAD_SIZE):
 
 
 def send_file(data_channel, control_channel, arquivo):
+    print("Sending file data")
     # Envia FILE (6) - Dados
     msg_type = MSG_TYPE["FILE"]
 
@@ -106,7 +104,7 @@ def send_file(data_channel, control_channel, arquivo):
         rcv = control_channel.recv(3)
         if rcv:
             print("Servidor recebeu pacote", sequence_num)
-        # time.sleep(3)
+        time.sleep(uniform(0, 1.1))
 
 
 def main():
