@@ -13,6 +13,7 @@ MSG_TYPE = {
 class File:
     def __init__(self):
         self.file_name = None
-        self.file_size = None
-        self.payload_size = None
-        self.bin_file = None
+        self.file_size = 0
+        self.bytes_sent = 0
+        self.bytes_received = 0
+        self.packages = None

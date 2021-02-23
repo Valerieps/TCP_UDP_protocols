@@ -50,6 +50,9 @@ def parse_file(filename):
     arquivo.bin_file = open(filename, "rb").read()
     arquivo.file_name = bytearray(filename, FORMAT)
     arquivo.file_size = str(len(arquivo.bin_file)).encode(FORMAT)
+    pacotes = break_in_chunks(arquivo.bin_file, payload_size=1000)
+    packed_files = add_header(pacotes)
+    arquivo.packages = packed_files
     return arquivo
 
 
@@ -74,37 +77,47 @@ def break_in_chunks(bin_data, payload_size=PAYLOAD_SIZE):
     if qnts_pacotes * PAYLOAD_SIZE < len(bin_data):
         qnts_pacotes += 1
 
+    pacotes = []
     start = None
-    idx = None
-
     for idx in range(qnts_pacotes):
         start = idx * payload_size
         end = start + payload_size
-        yield idx, bin_data[start:end]
-    yield idx, bin_data[start:]
+        pacotes.append(bin_data[start:end])
+    pacotes.append(bin_data[start:])
+    return pacotes
 
 
-def send_file(data_channel, control_channel, arquivo):
-    print("Sending file data")
-    # Envia FILE (6) - Dados
+def add_header(pacotes):
+    pacotes_com_header = []
     msg_type = MSG_TYPE["FILE"]
 
-    for idx, package in break_in_chunks(arquivo.bin_file, payload_size=1000):
+    for idx, pacote in enumerate(pacotes):
         idx = str(idx).encode(FORMAT)
+
         sequence_num = bytes(idx)
         sequence_num += b' ' * (4 - len(sequence_num))
 
         payload_size = b'11'  # todo descobrir o que é isso
         payload_size += b' ' * (2 - len(payload_size))
 
-        packed_file = msg_type + sequence_num + payload_size + package
-        data_channel.sendto(packed_file, data_channel.getpeername())
+        packed_file = msg_type + sequence_num + payload_size + pacote
+        pacotes_com_header.append(packed_file)
+
+    return pacotes_com_header
+
+
+def send_file(data_channel, control_channel, arquivo):
+    print("Sending file data")
+
+    # Envia FILE (6) - Dados
+    for idx, package in enumerate(arquivo.packages):
+        data_channel.sendto(package, data_channel.getpeername())
 
         # Recebe ACK(7) - Controle
-        rcv = control_channel.recv(3)
+        rcv = control_channel.recv(100)
+        sequence_num = rcv[2:]
         if rcv:
-            print("Servidor recebeu pacote", sequence_num)
-        time.sleep(uniform(0, 1.1))
+            print("Servidor recebeu pacote", rcv)
 
 
 def main():
@@ -121,4 +134,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

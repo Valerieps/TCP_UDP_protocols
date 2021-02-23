@@ -69,7 +69,7 @@ def receive_info_file(control_channel):
     control_channel.send(MSG_TYPE["OK"])
     return file
 
-
+# todo o sercer
 def receive_file(control_channel, data_channel, arquivo):
     print("Receiving file data")
     file_size = int(arquivo.file_size)
@@ -80,21 +80,16 @@ def receive_file(control_channel, data_channel, arquivo):
 
     pacotes = [None for i in range(total_de_pacotes)]
     bytes_received = 0
-    data_channel.settimeout(1)
+    # data_channel.settimeout(1)
 
     # Recebe FILE (6) - Dados
     print("Expecting to receive", file_size, "bytes")
     while bytes_received < file_size:
-        try:
-            packed_file, client = data_channel.recvfrom(PAYLOAD_SIZE + 10)
-        except:
-            print("Deu timeout")
-            # fazer algo se der timeout
+        packed_file, client = data_channel.recvfrom(PAYLOAD_SIZE + 10)
 
         msg_type = packed_file[:2]
         sequence_num = int(packed_file[2:6])
         payload_size = packed_file[6:8]
-        arquivo.payload_size = payload_size
         payload = packed_file[8:]
         if payload:
             pacotes[sequence_num] = payload
@@ -102,7 +97,9 @@ def receive_file(control_channel, data_channel, arquivo):
             print("Received", bytes_received, "bytes")
 
         # Envia ACK(7) - Controle
-        control_channel.send(MSG_TYPE["ACK"])
+        sequence_num = packed_file[2:6]
+        ack = MSG_TYPE["ACK"] + sequence_num
+        control_channel.send(ack)
 
     arquivo.bin_file = pacotes
 
