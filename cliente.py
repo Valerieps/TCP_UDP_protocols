@@ -47,10 +47,13 @@ def open_data_channel(args, data_channel_port):
 
 def parse_file(filename):
     arquivo = File()
-    arquivo.bin_file = open(filename, "rb").read()
+    bin_file = open(filename, "rb").read()
+
     arquivo.file_name = bytearray(filename, FORMAT)
-    arquivo.file_size = str(len(arquivo.bin_file)).encode(FORMAT)
-    pacotes = break_in_chunks(arquivo.bin_file, payload_size=1000)
+    arquivo.file_size = str(len(bin_file)).encode(FORMAT)
+    arquivo.get_total_packages(PAYLOAD_SIZE)
+
+    pacotes = break_in_chunks(bin_file, payload_size=1000)
     packed_files = add_header(pacotes)
     arquivo.packages = packed_files
     return arquivo
@@ -109,15 +112,25 @@ def add_header(pacotes):
 def send_file(data_channel, control_channel, arquivo):
     print("Sending file data")
 
+    control_channel.settimeout(1)
+
     # Envia FILE (6) - Dados
-    for idx, package in enumerate(arquivo.packages):
-        data_channel.sendto(package, data_channel.getpeername())
+    current_package = 0
+
+    while current_package < arquivo.total_packages:
+        print("Enviando pacote", len(arquivo.packages[current_package]))
+        bytes_sent = data_channel.sendto(arquivo.packages[current_package], data_channel.getpeername())
+        arquivo.bytes_sent += bytes_sent
 
         # Recebe ACK(7) - Controle
-        rcv = control_channel.recv(100)
-        sequence_num = rcv[2:]
-        if rcv:
-            print("Servidor recebeu pacote", rcv)
+        try:
+            rcv = control_channel.recv(100)
+            sequence_num = rcv[2:]
+            print("Servidor recebeu pacote", sequence_num)
+            current_package += 1
+        except:
+            print("Deu Timeout")
+            continue
 
 
 def main():

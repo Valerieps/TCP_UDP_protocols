@@ -58,50 +58,41 @@ def receive_info_file(control_channel):
     file = File()
 
     info_file_byte = control_channel.recv(30)
-    msg_type = info_file_byte[:2]
     file_name = info_file_byte[2:17].decode(FORMAT).strip()
     file_size = info_file_byte[17:].decode(FORMAT).strip()
 
     file.file_name = str(file_name).strip()
-    file.file_size = file_size
+    file.file_size = int(file_size)
+    file.get_total_packages(PAYLOAD_SIZE)
+    print(f"{file.total_packages=}")
 
     # Envia OK (4) - Controle
     control_channel.send(MSG_TYPE["OK"])
     return file
 
-# todo o sercer
+
 def receive_file(control_channel, data_channel, arquivo):
     print("Receiving file data")
-    file_size = int(arquivo.file_size)
 
-    total_de_pacotes = file_size // PAYLOAD_SIZE
-    if total_de_pacotes * PAYLOAD_SIZE < file_size:
-        total_de_pacotes += 1
-
-    pacotes = [None for i in range(total_de_pacotes)]
-    bytes_received = 0
-    # data_channel.settimeout(1)
+    received_packages = [None for _ in range(arquivo.total_packages)]
 
     # Recebe FILE (6) - Dados
-    print("Expecting to receive", file_size, "bytes")
-    while bytes_received < file_size:
+    print("Expecting to receive", arquivo.file_size, "bytes")
+    while arquivo.bytes_received < arquivo.file_size:
         packed_file, client = data_channel.recvfrom(PAYLOAD_SIZE + 10)
-
-        msg_type = packed_file[:2]
         sequence_num = int(packed_file[2:6])
-        payload_size = packed_file[6:8]
         payload = packed_file[8:]
         if payload:
-            pacotes[sequence_num] = payload
-            bytes_received += len(payload)
-            print("Received", bytes_received, "bytes")
+            received_packages[sequence_num] = payload
+            arquivo.bytes_received += len(payload)
+            print("Received", arquivo.bytes_received, "bytes")
 
         # Envia ACK(7) - Controle
         sequence_num = packed_file[2:6]
         ack = MSG_TYPE["ACK"] + sequence_num
         control_channel.send(ack)
 
-    arquivo.bin_file = pacotes
+    arquivo.packages = received_packages
 
 
 def save_file(arquivo):
@@ -110,7 +101,7 @@ def save_file(arquivo):
     filename = "output/" + filename
 
     with open(filename, "wb") as out:
-        for i, pacote in enumerate(arquivo.bin_file):
+        for i, pacote in enumerate(arquivo.packages):
             print("salvando pacote num", i)
             out.write(pacote)
 
