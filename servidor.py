@@ -78,6 +78,7 @@ def receive_file(control_channel, data_channel, arquivo):
 
     # Recebe FILE (6) - Dados
     print("Expecting to receive", arquivo.file_size, "bytes")
+    print("Received", end = " ")
     while arquivo.bytes_received < arquivo.file_size:
         packed_file, client = data_channel.recvfrom(PAYLOAD_SIZE + 10)
         sequence_num = int(packed_file[2:6])
@@ -85,7 +86,7 @@ def receive_file(control_channel, data_channel, arquivo):
         if payload:
             received_packages[sequence_num] = payload
             arquivo.bytes_received += len(payload)
-            print("Received", arquivo.bytes_received, "bytes")
+            print(arquivo.bytes_received, end = ", ")
 
         # Envia ACK(7) - Controle
         sequence_num = packed_file[2:6]
@@ -100,16 +101,11 @@ def save_file(arquivo):
     filename = str(arquivo.file_name).split("/")[-1]
     filename = "output/" + filename
 
+    print("salvando pacote num")
     with open(filename, "wb") as out:
         for i, pacote in enumerate(arquivo.packages):
-            print("salvando pacote num", i)
+            print(i, ",", end="")
             out.write(pacote)
-
-
-def end_connection(channel):
-    # Envia FIM(5) - Controle
-    # channel.shutdown(1)
-    channel.close()
 
 
 def handle_client(control_channel, server, address):
@@ -121,8 +117,9 @@ def handle_client(control_channel, server, address):
     receive_file(control_channel, data_channel, file)
     save_file(file)
     control_channel.send(MSG_TYPE["FIM"])
-    end_connection(data_channel)
-    end_connection(control_channel)
+    data_channel.close()
+    control_channel.close()
+    print("All Done!")
 
 
 def main():

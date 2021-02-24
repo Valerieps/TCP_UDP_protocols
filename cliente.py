@@ -96,16 +96,12 @@ def add_header(pacotes):
 
     for idx, pacote in enumerate(pacotes):
         idx = str(idx).encode(FORMAT)
-
         sequence_num = bytes(idx)
         sequence_num += b' ' * (4 - len(sequence_num))
-
         payload_size = b'11'  # todo descobrir o que é isso
         payload_size += b' ' * (2 - len(payload_size))
-
         packed_file = msg_type + sequence_num + payload_size + pacote
         pacotes_com_header.append(packed_file)
-
     return pacotes_com_header
 
 
@@ -117,8 +113,11 @@ def send_file(data_channel, control_channel, arquivo):
     # Envia FILE (6) - Dados
     current_package = 0
 
+    left_to_send = set(range(arquivo.total_packages))
+
+
     while current_package < arquivo.total_packages:
-        print("Enviando pacote", len(arquivo.packages[current_package]))
+        print("Enviando pacote", current_package))
         bytes_sent = data_channel.sendto(arquivo.packages[current_package], data_channel.getpeername())
         arquivo.bytes_sent += bytes_sent
 
