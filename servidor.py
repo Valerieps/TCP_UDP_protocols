@@ -2,7 +2,7 @@ import socket
 import threading
 import argparse
 from common import MSG_TYPE, File
-
+import time
 FORMAT = "ascii"
 PAYLOAD_SIZE = 1000
 
@@ -78,21 +78,28 @@ def receive_file(control_channel, data_channel, arquivo):
 
     # Recebe FILE (6) - Dados
     print("Expecting to receive", arquivo.file_size, "bytes")
-    print("Received", end = " ")
-    while arquivo.bytes_received < arquivo.file_size:
+
+    left_to_receive = set(range(arquivo.total_packages))
+    while left_to_receive:
+        print(left_to_receive)
         packed_file, client = data_channel.recvfrom(PAYLOAD_SIZE + 10)
-        sequence_num = int(packed_file[2:6])
+        sequence_num = int(packed_file[2:6].decode(FORMAT))
+        if sequence_num in left_to_receive:
+            left_to_receive.remove(sequence_num)
+        else:
+            continue
         payload = packed_file[8:]
-        if payload:
-            received_packages[sequence_num] = payload
-            arquivo.bytes_received += len(payload)
-            print(arquivo.bytes_received, end = ", ")
+
+        received_packages[sequence_num] = payload
+        arquivo.bytes_received += len(payload)
+
+        print("recebido pacote:", sequence_num, end=", ")
 
         # Envia ACK(7) - Controle
         sequence_num = packed_file[2:6]
         ack = MSG_TYPE["ACK"] + sequence_num
         control_channel.send(ack)
-
+        # time.sleep(1)
     arquivo.packages = received_packages
 
 

@@ -53,7 +53,7 @@ def parse_file(filename):
     arquivo.file_size = str(len(bin_file)).encode(FORMAT)
     arquivo.get_total_packages(PAYLOAD_SIZE)
 
-    pacotes = break_in_chunks(bin_file, payload_size=1000)
+    pacotes = break_in_chunks(bin_file, arquivo, payload_size=1000)
     packed_files = add_header(pacotes)
     arquivo.packages = packed_files
     return arquivo
@@ -75,11 +75,11 @@ def send_file_info(control_channel, arquivo):
     print(rcv)
 
 
-def break_in_chunks(bin_data, payload_size=PAYLOAD_SIZE):
-    qnts_pacotes = len(bin_data) // PAYLOAD_SIZE
-    if qnts_pacotes * PAYLOAD_SIZE < len(bin_data):
-        qnts_pacotes += 1
-
+def break_in_chunks(bin_data, arquivo, payload_size=PAYLOAD_SIZE):
+    # qnts_pacotes = len(bin_data) // PAYLOAD_SIZE
+    # if qnts_pacotes * PAYLOAD_SIZE < len(bin_data):
+    #     qnts_pacotes += 1
+    qnts_pacotes = arquivo.total_packages
     pacotes = []
     start = None
     for idx in range(qnts_pacotes):
@@ -115,21 +115,28 @@ def send_file(data_channel, control_channel, arquivo):
 
     left_to_send = set(range(arquivo.total_packages))
 
+    # while current_package < arquivo.total_packages:
+    while left_to_send:
+        send_this_iteration = list(left_to_send)
+        print(f"{send_this_iteration=}")
+        for current_package in send_this_iteration:
+            print("Enviando pacote", current_package)
+            bytes_sent = data_channel.sendto(arquivo.packages[current_package], data_channel.getpeername())
+            arquivo.bytes_sent += bytes_sent
 
-    while current_package < arquivo.total_packages:
-        print("Enviando pacote", current_package))
-        bytes_sent = data_channel.sendto(arquivo.packages[current_package], data_channel.getpeername())
-        arquivo.bytes_sent += bytes_sent
+            # Recebe ACK(7) - Controle
+            try:
+                rcv = control_channel.recv(100)
+                sequence_num = int(rcv[2:].decode(FORMAT))
+                print("Servidor recebeu pacote", sequence_num)
+                current_package += 1
+                left_to_send.remove(sequence_num)
+            except:
+                # print("Deu Timeout")
+                continue
+            time.sleep(1)
 
-        # Recebe ACK(7) - Controle
-        try:
-            rcv = control_channel.recv(100)
-            sequence_num = rcv[2:]
-            print("Servidor recebeu pacote", sequence_num)
-            current_package += 1
-        except:
-            print("Deu Timeout")
-            continue
+        print(".", end='')
 
 
 def main():
