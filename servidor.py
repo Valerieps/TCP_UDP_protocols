@@ -2,10 +2,11 @@ import socket
 import threading
 import argparse
 from common import MSG_TYPE, File
-import time
+from collections import OrderedDict
+
 FORMAT = "ascii"
 PAYLOAD_SIZE = 1000
-
+WINDOW_SIZE = 10
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Servidor')
@@ -15,7 +16,6 @@ def parse_args():
 
 def open_control_channel(tcp_port, server):
     tcp_addr = (server, tcp_port)
-
     control_channel = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     control_channel.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     control_channel.bind(tcp_addr)
@@ -24,7 +24,6 @@ def open_control_channel(tcp_port, server):
 
 def open_data_channel(udp_port, server):
     udp_addr = (server, udp_port)
-
     data_channel = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     data_channel.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     data_channel.bind(udp_addr)
@@ -34,10 +33,7 @@ def open_data_channel(udp_port, server):
 def greet_client(control_channel, data_channel):
     print("Greeting client")
     # Recebe HELLO (1) - Controle
-    hello = control_channel.recv(2)
-    if hello != MSG_TYPE["HELLO"]:
-        print("Wrong handshake")
-        control_channel.close()
+    _ = control_channel.recv(2)
 
     # Envia CONNECTION  (2) - Controle
     msg_type = MSG_TYPE["CONNECTION"]
@@ -56,15 +52,14 @@ def receive_info_file(control_channel):
 
     # Recebe INFO FILE (3) - Controle
     file = File()
-
     info_file_byte = control_channel.recv(30)
+
     file_name = info_file_byte[2:17].decode(FORMAT).strip()
     file_size = info_file_byte[17:].decode(FORMAT).strip()
 
     file.file_name = str(file_name).strip()
     file.file_size = int(file_size)
     file.get_total_packages(PAYLOAD_SIZE)
-    print(f"{file.total_packages=}")
 
     # Envia OK (4) - Controle
     control_channel.send(MSG_TYPE["OK"])
@@ -79,27 +74,39 @@ def receive_file(control_channel, data_channel, arquivo):
     # Recebe FILE (6) - Dados
     print("Expecting to receive", arquivo.file_size, "bytes")
 
-    left_to_receive = set(range(arquivo.total_packages))
-    while left_to_receive:
-        print(left_to_receive)
-        packed_file, client = data_channel.recvfrom(PAYLOAD_SIZE + 10)
-        sequence_num = int(packed_file[2:6].decode(FORMAT))
-        if sequence_num in left_to_receive:
-            left_to_receive.remove(sequence_num)
-        else:
-            continue
-        payload = packed_file[8:]
+    start = 0
+    end = WINDOW_SIZE
+    if end > arquivo.total_packages:
+        end = arquivo.total_packages
+    print(f"{end =}")
+    print(f"{arquivo.total_packages =}")
 
-        received_packages[sequence_num] = payload
-        arquivo.bytes_received += len(payload)
+    while end <= arquivo.total_packages:
+        print("Enviando janela", start, end)
+        # Recebe uma janela
+        for package in range(start, end): # 0,1,2,3,4
+            packed_file, client = data_channel.recvfrom(PAYLOAD_SIZE + 10)
+            sequence_num = int(packed_file[2:6].decode(FORMAT))
+            payload = packed_file[8:]
 
-        print("recebido pacote:", sequence_num, end=", ")
+            # Save package
+            received_packages[sequence_num] = payload
+            print("recebido pacote:", sequence_num, end=", ")
 
-        # Envia ACK(7) - Controle
-        sequence_num = packed_file[2:6]
-        ack = MSG_TYPE["ACK"] + sequence_num
-        control_channel.send(ack)
-        # time.sleep(1)
+            # Envia ACK(7) - Controle
+            sequence_num = packed_file[2:6]
+            ack = MSG_TYPE["ACK"] + sequence_num
+            control_channel.send(ack)
+
+        # atualiza start e end
+        start = end
+        end += WINDOW_SIZE
+        if end > arquivo.total_packages:
+            end = arquivo.total_packages
+        if start == end:
+            break
+
+    # Finished receiving file
     arquivo.packages = received_packages
 
 

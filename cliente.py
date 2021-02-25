@@ -1,11 +1,10 @@
 import socket
 import argparse
 from common import MSG_TYPE, File
-import time
-from random import uniform
 
 FORMAT = "ascii"
 PAYLOAD_SIZE = 1000
+WINDOW_SIZE = 10
 
 
 def parse_args():
@@ -38,8 +37,6 @@ def greet_server(control_channel):
 
 def open_data_channel(args, data_channel_port):
     udp_addr = (args.ip, data_channel_port)
-
-    # cria conexão UDP
     data_channel = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     data_channel.connect(udp_addr)
     return data_channel
@@ -76,9 +73,6 @@ def send_file_info(control_channel, arquivo):
 
 
 def break_in_chunks(bin_data, arquivo, payload_size=PAYLOAD_SIZE):
-    # qnts_pacotes = len(bin_data) // PAYLOAD_SIZE
-    # if qnts_pacotes * PAYLOAD_SIZE < len(bin_data):
-    #     qnts_pacotes += 1
     qnts_pacotes = arquivo.total_packages
     pacotes = []
     start = None
@@ -108,36 +102,29 @@ def add_header(pacotes):
 def send_file(data_channel, control_channel, arquivo):
     print("Sending file data")
 
-    control_channel.settimeout(1)
+    start = 0
+    end = WINDOW_SIZE
+    if end > arquivo.total_packages:
+        end = arquivo.total_packages
 
-    # Envia FILE (6) - Dados
-    current_package = 0
-
-    left_to_send = set(range(arquivo.total_packages))
-
-    # while current_package < arquivo.total_packages:
-    while left_to_send:
-        send_this_iteration = list(left_to_send)
-        print(f"{send_this_iteration=}")
-        for current_package in send_this_iteration:
-            print("Enviando pacote", current_package)
-            bytes_sent = data_channel.sendto(arquivo.packages[current_package], data_channel.getpeername())
-            arquivo.bytes_sent += bytes_sent
+    while end <= arquivo.total_packages:
+        # Envia uma janela
+        for package in range(start, end): # 0,1,2,3,4
+            print("Enviando pacote", package)
+            _ = data_channel.sendto(arquivo.packages[package], data_channel.getpeername())
 
             # Recebe ACK(7) - Controle
-            try:
-                rcv = control_channel.recv(100)
-                sequence_num = int(rcv[2:].decode(FORMAT))
-                print("Servidor recebeu pacote", sequence_num)
-                current_package += 1
-                left_to_send.remove(sequence_num)
-            except:
-                # print("Deu Timeout")
-                continue
-            time.sleep(1)
+            rcv = control_channel.recv(7)
+            sequence_num = int(rcv[2:].decode(FORMAT))
+            print("Server recebeu pacote", sequence_num)
 
-        print(".", end='')
-
+        # atualiza start e end
+        start = end
+        end += WINDOW_SIZE
+        if end > arquivo.total_packages:
+            end = arquivo.total_packages
+        if start == end:
+            break
 
 def main():
     args = parse_args()
