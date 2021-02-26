@@ -1,12 +1,13 @@
 import socket
 import threading
 import argparse
-from common import MSG_TYPE, File
+from common import MSG_TYPE, File, SlidingWindow
 from collections import OrderedDict
 
 FORMAT = "ascii"
 PAYLOAD_SIZE = 1000
 WINDOW_SIZE = 10
+
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Servidor')
@@ -54,60 +55,46 @@ def receive_info_file(control_channel):
     file = File()
     info_file_byte = control_channel.recv(30)
 
-    file_name = info_file_byte[2:17].decode(FORMAT).strip()
-    file_size = info_file_byte[17:].decode(FORMAT).strip()
-
-    file.file_name = str(file_name).strip()
-    file.file_size = int(file_size)
-    file.get_total_packages(PAYLOAD_SIZE)
-
     # Envia OK (4) - Controle
     control_channel.send(MSG_TYPE["OK"])
-    return file
+
+    file_name = info_file_byte[2:17].decode(FORMAT).strip()
+    file_size = info_file_byte[17:].decode(FORMAT).strip()
+    file.file_name = str(file_name).strip()
+    file.file_size = int(file_size)
+
+    sliding_window = SlidingWindow()
+    sliding_window.get_total_packages(file)
+    sliding_window.initialize_window(WINDOW_SIZE)
+
+    return file, sliding_window
 
 
-def receive_file(control_channel, data_channel, arquivo):
+def receive_file(control_channel, data_channel, sliding_window):
     print("Receiving file data")
 
-    received_packages = [None for _ in range(arquivo.total_packages)]
+    file_data = [None for _ in range(sliding_window.total_packages)]
 
-    # Recebe FILE (6) - Dados
-    print("Expecting to receive", arquivo.file_size, "bytes")
+    while not sliding_window.finished:
+        packed_file, client = data_channel.recvfrom(PAYLOAD_SIZE + 10)
+        sequence_num = int(packed_file[2:6].decode(FORMAT))
 
-    start = 0
-    end = WINDOW_SIZE
-    if end > arquivo.total_packages:
-        end = arquivo.total_packages
-    print(f"{end =}")
-    print(f"{arquivo.total_packages =}")
+        if sequence_num in sliding_window.current_window:
+            print("recebido pacote:", sequence_num, end=", ")
 
-    while end <= arquivo.total_packages:
-        print("Enviando janela", start, end)
-        # Recebe uma janela
-        for package in range(start, end): # 0,1,2,3,4
-            packed_file, client = data_channel.recvfrom(PAYLOAD_SIZE + 10)
-            sequence_num = int(packed_file[2:6].decode(FORMAT))
-            payload = packed_file[8:]
+            sliding_window.confirm_receipt(sequence_num)
+            sliding_window.add_new_package_to_window()
 
             # Save package
-            received_packages[sequence_num] = payload
-            print("recebido pacote:", sequence_num, end=", ")
+            payload = packed_file[8:]
+            file_data[sequence_num] = payload
 
             # Envia ACK(7) - Controle
             sequence_num = packed_file[2:6]
             ack = MSG_TYPE["ACK"] + sequence_num
             control_channel.send(ack)
 
-        # atualiza start e end
-        start = end
-        end += WINDOW_SIZE
-        if end > arquivo.total_packages:
-            end = arquivo.total_packages
-        if start == end:
-            break
-
-    # Finished receiving file
-    arquivo.packages = received_packages
+    return file_data
 
 
 def save_file(arquivo):
@@ -127,9 +114,9 @@ def handle_client(control_channel, server, address):
 
     data_channel = open_data_channel(0, server)
     greet_client(control_channel, data_channel)
-    file = receive_info_file(control_channel)
-    receive_file(control_channel, data_channel, file)
-    save_file(file)
+    arquivo, sliding_window = receive_info_file(control_channel)
+    receive_file(control_channel, data_channel, sliding_window)
+    save_file(arquivo)
     control_channel.send(MSG_TYPE["FIM"])
     data_channel.close()
     control_channel.close()

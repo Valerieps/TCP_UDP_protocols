@@ -1,6 +1,8 @@
 import socket
 import argparse
-from common import MSG_TYPE, File
+import threading
+from common import MSG_TYPE, File, SlidingWindow
+import time
 
 FORMAT = "ascii"
 PAYLOAD_SIZE = 1000
@@ -30,7 +32,6 @@ def greet_server(control_channel):
     print("Greeting server")
     control_channel.send(MSG_TYPE["HELLO"])
     server_answer = control_channel.recv(7).decode(FORMAT)
-    msg_type = server_answer[:2]
     data_channel_port = int(server_answer[2:])
     return data_channel_port
 
@@ -44,20 +45,13 @@ def open_data_channel(args, data_channel_port):
 
 def parse_file(filename):
     arquivo = File()
-    bin_file = open(filename, "rb").read()
-
+    arquivo.binary_data = open(filename, "rb").read()
     arquivo.file_name = bytearray(filename, FORMAT)
-    arquivo.file_size = str(len(bin_file)).encode(FORMAT)
-    arquivo.get_total_packages(PAYLOAD_SIZE)
-
-    pacotes = break_in_chunks(bin_file, arquivo, payload_size=1000)
-    packed_files = add_header(pacotes)
-    arquivo.packages = packed_files
+    arquivo.file_size = str(len(arquivo.binary_data)).encode(FORMAT)
     return arquivo
 
 
 def send_file_info(control_channel, arquivo):
-    # Envia INFO FILE (3) - Controle
     print("Sending file info")
     msg_type = MSG_TYPE["INFO_FILE"]
     file_name = arquivo.file_name
@@ -72,59 +66,72 @@ def send_file_info(control_channel, arquivo):
     print(rcv)
 
 
-def break_in_chunks(bin_data, arquivo, payload_size=PAYLOAD_SIZE):
-    qnts_pacotes = arquivo.total_packages
-    pacotes = []
-    start = None
-    for idx in range(qnts_pacotes):
-        start = idx * payload_size
-        end = start + payload_size
-        pacotes.append(bin_data[start:end])
-    pacotes.append(bin_data[start:])
-    return pacotes
+def make_sliding_window(arquivo):
+    window = SlidingWindow()
+    window.fit(arquivo, PAYLOAD_SIZE, FORMAT)
+    window.initialize_window(WINDOW_SIZE)
+    del arquivo
+    return window
 
 
-def add_header(pacotes):
-    pacotes_com_header = []
-    msg_type = MSG_TYPE["FILE"]
+# ======== Sender functions ============
+def sender_manager(data_channel, sliding_window, condition):
+    print("Starting sender")
 
-    for idx, pacote in enumerate(pacotes):
-        idx = str(idx).encode(FORMAT)
-        sequence_num = bytes(idx)
-        sequence_num += b' ' * (4 - len(sequence_num))
-        payload_size = b'11'  # todo descobrir o que é isso
-        payload_size += b' ' * (2 - len(payload_size))
-        packed_file = msg_type + sequence_num + payload_size + pacote
-        pacotes_com_header.append(packed_file)
-    return pacotes_com_header
+    # TODO retirar sleeps
+    while not sliding_window.finished:
+        s = threading.Thread(target=sender_task, args=(data_channel, sliding_window, condition))
+        s.start()
+        time.sleep(0.5)
+        s.join()
 
 
-def send_file(data_channel, control_channel, arquivo):
-    print("Sending file data")
+def sender_task(data_channel, sliding_window, condition):
+    with condition:
+        if sliding_window.available_item:
+            item = sliding_window.get_package_to_deal()
+            package = sliding_window.headed_packages[item]
+            _ = data_channel.sendto(package, data_channel.getpeername())
+            print("Sending package", item)
 
-    start = 0
-    end = WINDOW_SIZE
-    if end > arquivo.total_packages:
-        end = arquivo.total_packages
 
-    while end <= arquivo.total_packages:
-        # Envia uma janela
-        for package in range(start, end): # 0,1,2,3,4
-            print("Enviando pacote", package)
-            _ = data_channel.sendto(arquivo.packages[package], data_channel.getpeername())
+# ======== Receiver functions ============
+def confirmation_receiver_manager(control_channel, sliding_window, condition):
+    print("Starting Confirmation Receiver")
+    while not sliding_window.finished:
+        c = threading.Thread(target=confirmation_receiver_task, args=(control_channel, sliding_window, condition))
+        c.start()
+        time.sleep(1.1)
+        c.join()
 
-            # Recebe ACK(7) - Controle
-            rcv = control_channel.recv(7)
-            sequence_num = int(rcv[2:].decode(FORMAT))
-            print("Server recebeu pacote", sequence_num)
 
-        # atualiza start e end
-        start = end
-        end += WINDOW_SIZE
-        if end > arquivo.total_packages:
-            end = arquivo.total_packages
-        if start == end:
-            break
+def confirmation_receiver_task(control_channel, sliding_window, condition):
+    rcv = control_channel.recv(7)
+    msg_type = rcv[:2]
+    sequence_number = int(rcv[2:].decode(FORMAT))
+
+    with condition:
+        if msg_type == MSG_TYPE["RECEIVED EVERYTHING"]:
+            sliding_window.finished = True
+            return
+
+        if sliding_window.available_item:
+            print("Server received package", sequence_number)
+            sliding_window.confirm_receipt(sequence_number)
+            sliding_window.add_new_package_to_window()
+
+
+def send_file(sliding_window, data_channel, control_channel):
+    condition = threading.Condition()
+    sender = threading.Thread(target=sender_manager, args=(data_channel, sliding_window, condition))
+    confirmation_receiver = threading.Thread(target=confirmation_receiver_manager,
+                                    args=(control_channel, sliding_window, condition))
+    sender.start()
+    confirmation_receiver.start()
+
+    sender.join()
+    confirmation_receiver.join()
+
 
 def main():
     args = parse_args()
@@ -135,7 +142,9 @@ def main():
     data_channel = open_data_channel(args, data_channel_port)
     arquivo = parse_file(filename)
     send_file_info(control_channel, arquivo)
-    send_file(data_channel, control_channel, arquivo)
+    sliding_window = make_sliding_window(arquivo)
+    send_file(sliding_window, data_channel, control_channel)
+    print("All Done!")
 
 
 if __name__ == "__main__":
