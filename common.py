@@ -1,4 +1,6 @@
-
+FORMAT = "ascii"
+PAYLOAD_SIZE = 1000
+WINDOW_SIZE = 5
 MSG_TYPE = {
     "HELLO": b'1 ',
     "CONNECTION": b'2 ',
@@ -23,29 +25,30 @@ class SlidingWindow:
         self.payload_size = None
         self.format = None
         self.total_packages = None
-        self.headed_packages = None
+        self.all_packages = []
         self.window_size = None
         self.window_full = None
         self.next_to_add = 0
         self.booked_all_packages = False
         self.finished = False
         self.current_window = set()
+        self.to_confirm = set()
         self.available_item = None
 
-
-    def fit(self, arquivo, payload_size, encode_format):
-        self.get_total_packages(arquivo)
+    def fit(self, file, payload_size, encode_format):
         self.payload_size = payload_size
+        self.get_total_packages(file)
         self.format = encode_format
 
-        packages = self.break_in_chunks(arquivo)
-        self.headed_packages = self.add_header(packages)
+        packages = self.break_in_chunks(file)
+        self.all_packages = self.add_header(packages)
 
     def get_total_packages(self, arquivo):
         total_de_pacotes = int(arquivo.file_size) // self.payload_size
         if total_de_pacotes * self.payload_size < int(arquivo.file_size):
             total_de_pacotes += 1
         self.total_packages = total_de_pacotes
+        print(f"{total_de_pacotes=}")
 
     def break_in_chunks(self, arquivo):
         pacotes = []
@@ -72,23 +75,19 @@ class SlidingWindow:
         return pacotes_com_header
 
     def initialize_window(self, window_size):
-        """
-        - o gerador de pacotes precisa de uma função que vê se rola add mais: add_new_package_to_send()
-        - atributo finished_sending: quando tiver adicionado o ultimo pacote E o set esvaziar
-        """
-
         self.window_size = window_size
 
         if self.window_size < self.total_packages:
             for pkg in range(self.window_size):
                 self.current_window.add(pkg)
-                self.next_to_add = len(self.window_size)
+                self.next_to_add = self.window_size
         else:
             for pkg in range(self.total_packages):
                 self.current_window.add(pkg)
                 self.booked_all_packages = True
         self.available_item = True
         self.window_full = True
+        print(f"{self.current_window=}")
 
     def get_package_to_deal(self):
         """Return a package to send without removing from window"""
@@ -98,21 +97,30 @@ class SlidingWindow:
             return item
 
     def confirm_receipt(self, sequence_number):
+        print("Confirmando pacote", sequence_number)
         self.current_window.remove(sequence_number)
+
         if len(self.current_window) == 0:
             self.available_item = False
             if self.booked_all_packages:
                 self.finished = True
+        print(f"{self.current_window=}")
 
     def add_new_package_to_window(self):
-        """Add a new package to window, if possible"""
+        print("Tentando adicionar pacote na janela")
 
         if self.booked_all_packages:
+            print("Já agendou todos")
             return
 
         self.current_window.add(self.next_to_add)
+        print("Consegui adicionar o pacote", self.next_to_add)
         self.next_to_add += 1
         self.available_item = True
         if self.next_to_add == self.total_packages:
             self.booked_all_packages = True
+            if not self.all_packages:
+                self.finished
+
+        print(f"{self.current_window=}")
 
