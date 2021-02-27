@@ -1,6 +1,7 @@
 import socket
 import argparse
 import threading
+import time
 from common import MSG_TYPE, FORMAT, PAYLOAD_SIZE, WINDOW_SIZE
 from common import File, SlidingWindow
 
@@ -33,15 +34,12 @@ def connect_to_control_channel(args):
     server = args.ip
     tcp_addr = (server, tcp_port)
 
-    # cria conexão TCP
     try:
         control_channel = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         control_channel.connect(tcp_addr)
     except:
         control_channel = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
         control_channel.connect(tcp_addr)
-
-
     return control_channel
 
 
@@ -70,6 +68,15 @@ def parse_file(filename):
     return arquivo
 
 
+def make_sliding_window(arquivo):
+    window = SlidingWindow()
+    window.fit(arquivo, PAYLOAD_SIZE, FORMAT)
+    window.initialize_window(WINDOW_SIZE)
+    print("Fisrt window:", window.current_window)
+    del arquivo
+    return window
+
+
 def send_file_info(control_channel, arquivo):
     print("2. Sending file info")
     msg_type = MSG_TYPE["INFO_FILE"]
@@ -78,7 +85,6 @@ def send_file_info(control_channel, arquivo):
     file_size = arquivo.file_size
     file_size += b' ' * (8 - len(file_size))
     info_file = msg_type + file_name + file_size
-
     control_channel.send(info_file)
 
     # Recebe OK (4) - Controle
@@ -88,89 +94,50 @@ def send_file_info(control_channel, arquivo):
 def send_file(sliding_window, data_channel, control_channel):
     print("3. Sending file data")
     condition = threading.Condition()
+    control_channel.settimeout(0.5)
+
     sender = threading.Thread(target=sender_manager, args=(data_channel, sliding_window, condition))
-    confirmation_receiver = threading.Thread(target=confirmation_receiver_manager,
-                                             args=(control_channel, sliding_window, condition))
-    confirmation_receiver.start()
     sender.start()
 
-    confirmation_receiver.join()
+    print("Star listening to server responses")
+    while True:
+        if sliding_window.stop_sending:
+            break
+        try:
+            msg = control_channel.recv(10)
+            msg_type = msg[:2]
+            with condition:
+                if msg_type == MSG_TYPE["ACK"]:
+                    sequence_number = msg[2:].decode(FORMAT).strip()
+                    sequence_number = int(sequence_number)
+                    sliding_window.confirm_receipt(sequence_number)
+                    sliding_window.add_new_package_to_window()
+                    condition.notify()
+                elif msg_type == MSG_TYPE["RECEIVED EVERYTHING"]:
+                    sliding_window.stop_sending = True
+                    break
+        except:
+            continue
+
     sender.join()
     print("Finished sending file")
 
 
-def make_sliding_window(arquivo):
-    window = SlidingWindow()
-    window.fit(arquivo, PAYLOAD_SIZE, FORMAT)
-    window.initialize_window(WINDOW_SIZE)
-    del arquivo
-    return window
-
-
-# ======== Sender functions ============
 def sender_manager(data_channel, sliding_window, condition):
     print("3.2 Starting Sender")
-
-    while not sliding_window.finished:
-        s = threading.Thread(target=sender_task, args=(data_channel, sliding_window, condition))
-        s.start()
-        s.join()
+    print("Falta enviar:", sliding_window.current_window)
+    while not sliding_window.stop_sending:
+        with condition:
+            current_window = list(sliding_window.current_window)
+        for to_send in current_window:
+            print("Enviando pacote", to_send)
+            with condition:
+                s = threading.Thread(target=data_channel.sendto, args=(sliding_window.all_packages[to_send],
+                                                                         data_channel.getpeername()))
+            s.start()
+            time.sleep(.1)
+        # condition.wait()
     print("CLOSING Sender")
-
-
-def sender_task(data_channel, sliding_window, condition):
-    # print("Sender task")
-    with condition:
-        if sliding_window.available_item:
-            item = sliding_window.get_package_to_deal()
-            package = sliding_window.all_packages[item]
-            try:
-                print("Sending package", item)
-                _ = data_channel.sendto(package, data_channel.getpeername())
-            except:
-                return
-
-
-# ======== Receiver functions ============
-def confirmation_receiver_manager(control_channel, sliding_window, condition):
-    print("3.1 Starting Confirmation Receiver")
-    control_channel.settimeout(0.3)
-    while not sliding_window.finished:
-        c = threading.Thread(target=confirmation_receiver_task, args=(control_channel, sliding_window, condition))
-        c.start()
-        c.join()
-    print("CLOSING Confirmation Receiver")
-
-
-def confirmation_receiver_task(control_channel, sliding_window, condition):
-    with condition:
-        try:
-            rcv = control_channel.recv(7)
-            if rcv == MSG_TYPE["FIM"] or rcv == MSG_TYPE["RECEIVED EVERYTHING"]:
-                sliding_window.finished = True
-                print("Server recebeu tudo")
-                return
-        except:
-            return
-
-    msg_type = rcv[:2]
-    sequence_number = rcv[2:]
-    # server finished receiving
-    if not sequence_number:
-        sliding_window.finished = True
-        return
-
-    sequence_number = int(sequence_number.decode(FORMAT))
-
-    with condition:
-        if msg_type == MSG_TYPE["RECEIVED EVERYTHING"]:
-            sliding_window.finished = True
-            return
-
-        if sliding_window.available_item:
-            print("Server received package", sequence_number)
-            sliding_window.confirm_receipt(sequence_number)
-            sliding_window.add_new_package_to_window()
 
 
 def main():

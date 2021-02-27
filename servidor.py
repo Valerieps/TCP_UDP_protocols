@@ -45,7 +45,6 @@ def greet_client(control_channel, data_channel):
     udp_port = data_channel.getsockname()[1]
     udp_port = str(udp_port).encode(FORMAT)
 
-    # TODO udp port tem 5 bytes e não 4
     udp_port += b' ' * (5 - len(udp_port))
     message = msg_type + udp_port
     control_channel.send(message)
@@ -79,7 +78,7 @@ def receive_info_file(control_channel):
 # ============= PACKAGE RECEIVER FUNCTIONS =================
 def package_receiver_manager(sliding_window, data_channel, condition):
     print("Starting Package Receiver")
-    while not sliding_window.finished:
+    while not sliding_window.stop_sending:
         c = Thread(target=package_receiver_task, args=(sliding_window, data_channel, condition))
         c.start()
         c.join()
@@ -111,7 +110,7 @@ def package_receiver_task(sliding_window, data_channel, condition):
 def confirmation_sender_manager(sliding_window, control_channel, condition):
     print("Starting Confirmation Sender")
 
-    while not sliding_window.finished:
+    while not sliding_window.stop_sending:
         s = Thread(target=confirmation_sender_task, args=(sliding_window, control_channel, condition))
         s.start()
         s.join()
@@ -139,6 +138,7 @@ def receive_file(control_channel, data_channel, sliding_window):
     print("Receiving file data")
 
     condition = Condition()
+
     package_receiver = Thread(target=package_receiver_manager, args=(sliding_window, data_channel, condition))
     confirmation_sender = Thread(target=confirmation_sender_manager, args=(sliding_window, control_channel, condition))
     package_receiver.start()

@@ -30,10 +30,9 @@ class SlidingWindow:
         self.window_full = None
         self.next_to_add = 0
         self.booked_all_packages = False
-        self.finished = False
+        self.stop_sending = False
         self.current_window = set()
         self.to_confirm = set()
-        self.available_item = None
 
     def fit(self, file, payload_size, encode_format):
         self.payload_size = payload_size
@@ -89,21 +88,12 @@ class SlidingWindow:
         self.window_full = True
         print(f"{self.current_window=}")
 
-    def get_package_to_deal(self):
-        """Return a package to send without removing from window"""
-        if self.available_item:
-            item = self.current_window.pop()
-            self.current_window.add(item)
-            return item
-
     def confirm_receipt(self, sequence_number):
         print("Confirmando pacote", sequence_number)
         self.current_window.remove(sequence_number)
 
-        if len(self.current_window) == 0:
-            self.available_item = False
-            if self.booked_all_packages:
-                self.finished = True
+        if not self.current_window and self.booked_all_packages:
+                self.stop_sending = True
         print(f"{self.current_window=}")
 
     def add_new_package_to_window(self):
@@ -111,16 +101,17 @@ class SlidingWindow:
 
         if self.booked_all_packages:
             print("Já agendou todos")
+            if not self.all_packages:
+                self.stop_sending = True
             return
 
         self.current_window.add(self.next_to_add)
         print("Consegui adicionar o pacote", self.next_to_add)
         self.next_to_add += 1
-        self.available_item = True
         if self.next_to_add == self.total_packages:
             self.booked_all_packages = True
             if not self.all_packages:
-                self.finished
+                self.stop_sending
 
         print(f"{self.current_window=}")
 
